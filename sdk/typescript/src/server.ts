@@ -114,7 +114,15 @@ export class AEPServer {
     if (opts.runtime) {
       this._runtime = opts.runtime;
     } else if (opts.productionDeps) {
-      // Production mode — all security deps required
+      // Production mode — all security deps required.
+      // TestAuthenticator is NEVER used in production.
+      if (opts.environment === "production" && !opts.productionDeps.authenticator) {
+        throw new Error(
+          "Production mode requires an authenticator. " +
+          "TestAuthenticator is not allowed in production. " +
+          "Configure OIDC, mTLS, or a custom Authenticator."
+        );
+      }
       this._runtime = createProductionRuntime({
         registry: this.registry,
         authenticator: opts.productionDeps.authenticator || new TestAuthenticator(),

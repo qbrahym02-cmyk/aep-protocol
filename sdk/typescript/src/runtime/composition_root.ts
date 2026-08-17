@@ -122,26 +122,49 @@ export function createProductionRuntime(deps: ProductionRuntimeDependencies): Ex
     getExecution: async (id: string, principal: any) => {
       const record = await deps.executionStore.load(id);
       if (!record) return null;
-      // Object-level authz (§52)
-      if (record.principal.id !== principal.id && record.principal.tenant_id !== principal.tenant_id) {
+      // §10 Object-level authorization: must be same principal OR same tenant
+      // Both checks must pass — AND logic, not OR
+      if (record.principal.id !== principal.id) {
+        // Different principal — check tenant
+        if (record.principal.tenant_id !== principal.tenant_id) {
+          // Different tenant — deny
+          return null;
+        }
+        // Same tenant, different principal — could be allowed with tenant-scoped authority
+        // For now, deny cross-principal access (can be relaxed with explicit policy)
         return null;
       }
       return record;
     },
     cancel: async (id: string, principal: any) => {
+      const record = await deps.executionStore.load(id);
+      if (!record) throw new Error(`Execution ${id} not found`);
+      // §10 Object-level authorization for cancel
+      if (record.principal.id !== principal.id && record.principal.tenant_id !== principal.tenant_id) {
+        throw new Error("Unauthorized: cannot cancel another principal's execution");
+      }
       return engine.cancel(id, principal);
     },
     resume: async (id: string, principal: any) => {
       const result = await deps.executionStore.load(id);
       if (!result) throw new Error(`Execution ${id} not found`);
-      // Object-level authz
+      // §10 Object-level authorization for resume
       if (result.principal.id !== principal.id && result.principal.tenant_id !== principal.tenant_id) {
-        throw new Error("Unauthorized");
+        throw new Error("Unauthorized: cannot resume another principal's execution");
       }
       return { aep: "0.1", id, status: "accepted" as any, execution: { id, state: result.state } };
     },
     listExecutions: async (principal: any, filter?: any) => {
-      return deps.executionStore.list({ principal_id: principal.id, ...filter });
+      // §11 Query Authorization: principal_id is ALWAYS enforced from the authenticated principal.
+      // The caller CANNOT override it via filter.
+      const safeFilter = { ...filter };
+      delete safeFilter.principal_id;  // Never trust caller-supplied principal_id
+      delete safeFilter.tenant_id;     // Never trust caller-supplied tenant_id
+      return deps.executionStore.list({
+        principal_id: principal.id,
+        tenant_id: principal.tenant_id,
+        ...safeFilter,
+      });
     },
     shutdown: async () => {
       // §90: Graceful shutdown
