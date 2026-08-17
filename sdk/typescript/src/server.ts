@@ -94,7 +94,7 @@ export class AEPServer {
     * Uses SecureExecutionEngine, NOT the legacy ExecutionEngine.
     */
   private _runtime: ExecutionRuntime | null = null;
-  private gateway: HTTPGateway | null = null;
+  gateway: HTTPGateway | null = null;  // public for CLI override
   private opts: AEPServerOptions;
   private _isShuttingDown = false;
 
@@ -144,13 +144,21 @@ export class AEPServer {
   }
 
   /**
-    * The runtime. This is always SecureExecutionEngine-based.
-    */
+   * The runtime. This is always SecureExecutionEngine-based.
+   */
   get runtime(): ExecutionRuntime {
     if (!this._runtime) {
       throw new Error("Runtime not initialized");
     }
     return this._runtime;
+  }
+
+  /**
+   * The dev authenticator (for CLI use in development mode).
+   * Returns the authenticator used by the gateway.
+   */
+  get devAuthenticator(): Authenticator {
+    return this.opts.productionDeps?.authenticator || new TestAuthenticator();
   }
 
   /**
@@ -193,7 +201,7 @@ export class AEPServer {
     this.gateway = new HTTPGateway({
       runtime: this.runtime,
       registry: this.registry,
-      authenticator: (this.opts.productionDeps?.authenticator || new TestAuthenticator()) as any,
+      authenticator: this.opts.productionDeps?.authenticator || new TestAuthenticator(),
       events: this.events,
       artifacts: this.artifacts,
       audit: this.audit,
@@ -201,7 +209,7 @@ export class AEPServer {
       approvalService: this.approval,
     });
     const port = opts.port || 8080;
-    const host = opts.host || "0.0.0.0";
+    const host = opts.host || "127.0.0.1";
     await this.gateway.listen(port, host);
     console.log(`AEP server listening on http://${host}:${port}`);
     console.log(`  Runtime: ${this.opts.productionDeps ? "production" : "development"} (SecureExecutionEngine)`);

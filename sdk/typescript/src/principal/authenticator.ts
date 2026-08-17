@@ -108,8 +108,16 @@ export class TestAuthenticator implements Authenticator {
   }
 
   async authenticate(credentials: Credentials): Promise<VerifiedPrincipal> {
+    // Accept bearer_token: look up the token directly
+    if (credentials.type === "bearer_token") {
+      const entry = this.knownTokens.get(credentials.token);
+      if (!entry) {
+        throw new AuthenticationError("INVALID_CREDENTIALS", "Unknown token");
+      }
+      return entry.principal;
+    }
     if (credentials.type !== "test_token") {
-      throw new AuthenticationError("INVALID_CREDENTIALS", "TestAuthenticator only accepts test_token");
+      throw new AuthenticationError("INVALID_CREDENTIALS", "TestAuthenticator only accepts test_token or bearer_token");
     }
     const entry = this.knownTokens.get(credentials.principal_id);
     if (!entry) {

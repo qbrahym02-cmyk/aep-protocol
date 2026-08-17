@@ -137,15 +137,35 @@ Examples:
 async function serveCmd(args: string[]): Promise<void> {
   const { flags } = parseFlags(args);
   const port = parseInt((flags.port as string) || "8080", 10);
-  const host = (flags.host as string) || "0.0.0.0";
+  const host = (flags.host as string) || "127.0.0.1";
 
   const server = new AEPServer({
     defaultTimeoutMs: 30_000,
-    environment: "production",
+    environment: "test",
   });
   for (const cap of BUILTIN_CAPABILITIES) server.capability(cap);
 
-  await server.listen({ port, host });
+  // Register the dev authenticator with a known token
+  const { TestAuthenticator } = await import("./principal/authenticator.js");
+  const testAuth = new TestAuthenticator();
+  testAuth.register("test-token:dev-user", { id: "dev-user", type: "user", tenant_id: "dev-tenant" } as any);
+  server.gateway = new (await import("./gateway/http.js")).HTTPGateway({
+    runtime: server.runtime,
+    registry: server.registry,
+    authenticator: testAuth,
+    events: server.events,
+    artifacts: server.artifacts,
+    audit: server.audit,
+    policy: server.policy,
+    approvalService: server.approval,
+  });
+
+  await server.gateway.listen(port, host);
+  console.log(`AEP server listening on http://${host}:${port}`);
+  console.log(`  Use --token test-token:dev-user for authentication`);
+  console.log(`  Discovery: http://${host}:${port}/.well-known/aep`);
+  console.log(`  Execute:   POST http://${host}:${port}/aep`);
+  console.log(`  Capabilities: ${server.registry.stats().total} registered`);
 
   // keep alive
   process.on("SIGINT", async () => {
@@ -156,27 +176,40 @@ async function serveCmd(args: string[]): Promise<void> {
 }
 
 function baseUrl(flags: Record<string, string | boolean>): string {
-  return (flags["base-url"] as string) || "http://localhost:8080";
+  return (flags["base-url"] as string) || "http://127.0.0.1:8080";
+}
+
+const DEV_TOKEN = "test-token:dev-user";
+
+function authHeaders(flags: Record<string, string | boolean>): Record<string, string> {
+  const token = (flags.token as string) || DEV_TOKEN;
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function discoverCmd(args: string[]): Promise<void> {
   const { flags } = parseFlags(args);
-  const client = new AEPClient({ baseUrl: baseUrl(flags) });
+  const url = baseUrl(flags);
+  const headers = authHeaders(flags);
   const level = parseInt((flags.level as string) || "1", 10) as 1 | 2 | 3 | 4;
-  const kind = flags.kind as never;
+  const kind = flags.kind as string | undefined;
   const limit = parseInt((flags.limit as string) || "50", 10);
+  const params = new URLSearchParams();
+  params.set("level", String(level));
+  if (kind) params.set("kind", kind);
+  params.set("limit", String(limit));
 
-  const result = await client.discover({ level, kind, limit });
-  console.log(JSON.stringify(result, null, 2));
+  const res = await fetch(`${url}/aep/capabilities?${params}`, { headers });
+  const json = await res.json();
+  console.log(JSON.stringify(json, null, 2));
 }
 
 async function inspectCmd(args: string[]): Promise<void> {
   const { positional, flags } = parseFlags(args);
   const id = positional[0];
   if (!id) { console.error("Missing capability id"); process.exit(1); }
-  const client = new AEPClient({ baseUrl: baseUrl(flags) });
-  const fetchFn = fetch;
-  const res = await fetchFn(`${baseUrl(flags)}/aep/capabilities/${encodeURIComponent(id)}`);
+  const res = await fetch(`${baseUrl(flags)}/aep/capabilities/${encodeURIComponent(id)}`, {
+    headers: authHeaders(flags),
+  });
   const json = await res.json();
   console.log(JSON.stringify(json, null, 2));
 }
@@ -194,12 +227,30 @@ async function executeCmd(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const client = new AEPClient({ baseUrl: baseUrl(flags) });
-  const response = await client.execute(capId, input, {
-    mode: flags.async ? "async" : "sync",
-    dry_run: !!flags["dry-run"],
-    version: flags.version as string,
+  const url = baseUrl(flags);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/aep+json",
+    ...authHeaders(flags),
+  };
+
+  const body = JSON.stringify({
+    aep: "0.1",
+    id: `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    type: "execute",
+    capability: { id: capId, ...(flags.version ? { version: flags.version } : {}) },
+    input,
+    execution: {
+      mode: flags.async ? "async" : "sync",
+      ...(flags["dry-run"] ? { dry_run: true } : {}),
+    },
   });
+
+  const res = await fetch(`${url}/aep`, {
+    method: "POST",
+    headers,
+    body,
+  });
+  const response = await res.json();
   console.log(JSON.stringify(response, null, 2));
 }
 
@@ -207,8 +258,10 @@ async function traceCmd(args: string[]): Promise<void> {
   const { positional, flags } = parseFlags(args);
   const execId = positional[0];
   if (!execId) { console.error("Missing execution id"); process.exit(1); }
-  const client = new AEPClient({ baseUrl: baseUrl(flags) });
-  const result = await client.getExecution(execId);
+  const res = await fetch(`${baseUrl(flags)}/aep/executions/${execId}`, {
+    headers: authHeaders(flags),
+  });
+  const result = await res.json();
   console.log(JSON.stringify(result, null, 2));
 }
 
