@@ -111,3 +111,6 @@ export { registerProvider, GITHUB_PROVIDER, STRIPE_PROVIDER, SLACK_PROVIDER, POS
 export { HmacSha256Signer, KeyStore, buildSignedReceipt, verifySignedReceipt, buildSignedAuthority, verifySignedAuthority, type Signer, type SigningKey, type SignatureEnvelope, type SignedReceipt, type SignedAuthority } from "./security/crypto.js";
 
 export { runConformance, type ConformanceResult } from "./conformance/runner.js";
+
+// AEP Kit — Simple agent interface
+export { AEP, AEPApprovalRequiredError, toOpenAIFunctions, aepToLangChain } from "./kit.js";
