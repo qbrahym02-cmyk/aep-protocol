@@ -22,6 +22,7 @@ export async function runDurableTests(
     const record: any = {
       id: "exec_sqlite_1", request_id: "req_1",
       principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "math.add" }, state: "created",
       created_at: new Date().toISOString(),
     };
@@ -38,6 +39,7 @@ export async function runDurableTests(
     await execStore.save({
       id: "exec_sqlite_2", request_id: "req_2",
       principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "math.add" }, state: "created",
       created_at: new Date().toISOString(),
     } as any);
@@ -55,6 +57,7 @@ export async function runDurableTests(
       await execStore.save({
         id: `exec_${i}`, request_id: `req_${i}`,
         principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
         capability: { id: "math.add" }, state: "running",
         created_at: new Date().toISOString(),
       } as any);
@@ -162,6 +165,7 @@ export async function runDurableTests(
     await execStore.save({
       id: "exec_recover_1", request_id: "req_1",
       principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "math.add" }, state: "created",
       created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
     } as any);
@@ -183,6 +187,7 @@ export async function runDurableTests(
     await execStore.save({
       id: "exec_recover_2", request_id: "req_2",
       principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "deploy.production" }, state: "awaiting_approval",
       created_at: new Date(Date.now() - 10 * 60_000).toISOString(),
       expires_at: new Date(Date.now() - 60_000).toISOString(),
@@ -202,6 +207,7 @@ export async function runDurableTests(
     await execStore.save({
       id: "exec_recover_3", request_id: "req_3",
       principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "math.add" }, state: "running",
       created_at: new Date().toISOString(),
     } as any);

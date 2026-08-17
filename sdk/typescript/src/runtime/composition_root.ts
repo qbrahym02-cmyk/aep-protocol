@@ -139,8 +139,8 @@ export function createProductionRuntime(deps: ProductionRuntimeDependencies): Ex
     cancel: async (id: string, principal: any) => {
       const record = await deps.executionStore.load(id);
       if (!record) throw new Error(`Execution ${id} not found`);
-      // §10 Object-level authorization for cancel
-      if (record.principal.id !== principal.id && record.principal.tenant_id !== principal.tenant_id) {
+      // §10 + FIX 7: Same strict authz as getExecution — deny cross-principal even within same tenant
+      if (record.principal.id !== principal.id) {
         throw new Error("Unauthorized: cannot cancel another principal's execution");
       }
       return engine.cancel(id, principal);
@@ -148,8 +148,8 @@ export function createProductionRuntime(deps: ProductionRuntimeDependencies): Ex
     resume: async (id: string, principal: any) => {
       const result = await deps.executionStore.load(id);
       if (!result) throw new Error(`Execution ${id} not found`);
-      // §10 Object-level authorization for resume
-      if (result.principal.id !== principal.id && result.principal.tenant_id !== principal.tenant_id) {
+      // §10 + FIX 7: Same strict authz as getExecution
+      if (result.principal.id !== principal.id) {
         throw new Error("Unauthorized: cannot resume another principal's execution");
       }
       return { aep: "0.1", id, status: "accepted" as any, execution: { id, state: result.state } };
@@ -201,6 +201,35 @@ export function createDevelopmentRuntime(registry: CapabilityRegistry): Executio
     registry,
     authenticator: {
       authenticate: async (creds: any) => {
+        // Dev authenticator: accepts bearer_token, api_key, and test_token
+        // In production, a real authenticator (OIDC/mTLS) is used instead.
+        if (creds.type === "bearer_token") {
+          // Dev mode: treat the token as the principal ID (simplified)
+          // In production, this would verify JWT signature + issuer + audience + expiry
+          // and extract sub/claims from the verified JWT.
+          const tokenParts = creds.token.split(":");
+          const principalId = tokenParts.length > 1 ? tokenParts[1] : creds.token;
+          return {
+            id: principalId,
+            type: "user",
+            issuer: "dev",
+            authenticated_at: new Date().toISOString(),
+            authentication_method: "oauth2" as any,
+            claims: {},
+            assurance_level: "substantial" as any,
+          };
+        }
+        if (creds.type === "api_key") {
+          return {
+            id: `key-${creds.key.slice(0, 8)}`,
+            type: "service",
+            issuer: "dev",
+            authenticated_at: new Date().toISOString(),
+            authentication_method: "api_key" as any,
+            claims: {},
+            assurance_level: "substantial" as any,
+          };
+        }
         if (creds.type === "test_token") {
           return {
             id: creds.principal_id || "dev-user",
@@ -212,7 +241,7 @@ export function createDevelopmentRuntime(registry: CapabilityRegistry): Executio
             assurance_level: "substantial" as any,
           };
         }
-        throw new Error("Dev authenticator only accepts test_token");
+        throw new Error(`Dev authenticator: unsupported credential type ${creds.type}`);
       },
     },
     authorityEngine,

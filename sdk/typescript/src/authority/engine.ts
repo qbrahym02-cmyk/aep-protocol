@@ -338,9 +338,12 @@ export class AuthorityEngine {
 
     const childChain = [...(parent.delegation_chain || []), issuedBy.id, parent.subject.id];
 
+    // FIX 8: derive() is @internal — subject is set by deriveTo()
+    // derive() creates with parent's subject (temporary), deriveTo() overrides with real subject.
+    // This is the ONLY place where a temporary subject exists, and it's immediately replaced.
     const child: Authority = {
       id: makeAuthorityId(),
-      subject: { ...parent.subject, id: `${parent.subject.id}.sub` }, // mock — في الحقيقة يأتي من issuedBy
+      subject: parent.subject, // Will be overridden by deriveTo()
       capabilities: childCaps,
       resources: childRes,
       constraints: childConstraints,
@@ -352,10 +355,6 @@ export class AuthorityEngine {
       parent_authority_id: parentId,
       delegation_chain: childChain,
     };
-
-    // override subject — Must caller
-    // semantics: child.subject = the new agent identity
-    // caller subject subset
 
     this.authorities.set(child.id, child);
     return child;

@@ -251,6 +251,7 @@ export async function runP0Tests(
     const store = new InMemoryExecutionStore();
     const record: any = {
       id: "exec_1", request_id: "req_1", principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "math.add" }, state: "created", created_at: new Date().toISOString(),
     };
     await store.save(record);

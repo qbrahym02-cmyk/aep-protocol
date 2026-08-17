@@ -198,12 +198,14 @@ export class AEPServer {
     */
   async listen(opts: { port?: number; host?: string } = {}): Promise<void> {
     this.gateway = new HTTPGateway({
-      executionEngine: this.runtime as any,
+      runtime: this.runtime,
       registry: this.registry,
+      authenticator: (this.opts.productionDeps?.authenticator || new TestAuthenticator()) as any,
       events: this.events,
       artifacts: this.artifacts,
       audit: this.audit,
       policy: this.policy,
+      approvalService: this.approval,
     });
     const port = opts.port || 8080;
     const host = opts.host || "0.0.0.0";

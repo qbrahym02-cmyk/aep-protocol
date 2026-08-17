@@ -29,7 +29,7 @@ import type {
 } from "../core/types.js";
 import type { CapabilityRegistry, RegisteredCapability } from "../core/registry.js";
 import type { AuthorityEngine, Authority } from "../authority/engine.js";
-import type { Authenticator, VerifiedPrincipal } from "../principal/authenticator.js";
+import type { Authenticator, VerifiedPrincipal, Credentials } from "../principal/authenticator.js";
 import type { PolicyEngine } from "../policy/engine.js";
 import type { RiskEngine } from "../policy/risk.js";
 import type {
@@ -116,16 +116,20 @@ export class SecureExecutionEngine {
 
     // -------------------------------------------------------------------
     // 1) Authenticate — The Authenticator IS the source of identity.
-    //    NO claimed principal. NO anonymous fallback. (P0-02)
+    //    Credentials are extracted from request.authorization.
+    //    NO hardcoded test_token. NO claimed principal. NO anonymous.
     // -------------------------------------------------------------------
     let principal: VerifiedPrincipal;
     try {
-      principal = await this.opts.authenticator.authenticate({
-        type: "test_token",
-        principal_id: request.principal?.id || "",
-        principal_type: request.principal?.type,
-        tenant_id: request.principal?.tenant_id,
-      });
+      const credentials = this.extractCredentials(request);
+      if (!credentials) {
+        return this.errorResponse(
+          request, ERR.UNAUTHORIZED,
+          "No credentials provided in request.authorization",
+          false
+        );
+      }
+      principal = await this.opts.authenticator.authenticate(credentials);
     } catch (err) {
       return this.errorResponse(
         request,
@@ -332,8 +336,45 @@ export class SecureExecutionEngine {
 
     // -------------------------------------------------------------------
     // 9) Atomic budget reserve — BEFORE execute (P0-08)
+    //    Also enforce authority constraints (§8): request budget ≤ authority constraints
     // -------------------------------------------------------------------
-    const budget = request.budget;
+    let budget = request.budget;
+
+    // Enforce authority constraints on budget (not just delegation)
+    if (authority?.constraints) {
+      const ac = authority.constraints;
+      if (ac.max_cost_usd !== undefined) {
+        const reqCost = budget?.max_cost_usd ?? Infinity;
+        if (reqCost > ac.max_cost_usd) {
+          // Clamp to authority limit
+          budget = { ...budget, max_cost_usd: ac.max_cost_usd };
+        }
+      }
+      if (ac.max_calls !== undefined) {
+        const reqCalls = budget?.max_calls ?? Infinity;
+        if (reqCalls > ac.max_calls) {
+          budget = { ...budget, max_calls: ac.max_calls };
+        }
+      }
+      if (ac.max_duration_ms !== undefined) {
+        const reqDuration = budget?.max_duration_ms ?? Infinity;
+        if (reqDuration > ac.max_duration_ms) {
+          budget = { ...budget, max_duration_ms: ac.max_duration_ms };
+        }
+      }
+    }
+
+    // Enforce authority timeout: execution timeout ≤ authority max_duration
+    if (authority?.constraints?.max_duration_ms !== undefined) {
+      const reqTimeout = request.execution?.timeout_ms ?? this.opts.defaultTimeoutMs ?? 30_000;
+      if (reqTimeout > authority.constraints.max_duration_ms) {
+        return this.errorResponse(
+          request, ERR.UNAUTHORIZED,
+          `Execution timeout ${reqTimeout}ms exceeds authority max_duration_ms ${authority.constraints.max_duration_ms}`,
+          false
+        );
+      }
+    }
     let budgetReservationId: string | undefined;
     if (budget && this.opts.budgetStore) {
       const reserveResult = await this.opts.budgetStore.reserve(
@@ -345,6 +386,25 @@ export class SecureExecutionEngine {
         }
       );
       if (!reserveResult.success) {
+        // FIX 6: Release idempotency reservation on budget failure
+        if (request.execution?.idempotency_key && reservedExecId) {
+          const scope: IdempotencyScope = {
+            tenant_id: principal.tenant_id,
+            principal_id: principal.id,
+            capability_id: contract.id,
+            resource: (request as unknown as Record<string, unknown>).resource as string | undefined,
+            authority_id: authority?.id,
+            idempotency_key: request.execution.idempotency_key,
+          };
+          await this.opts.idempotencyStore.update(scope, {
+            state: "failed",
+            error: {
+              code: "BUDGET_EXCEEDED",
+              message: "Budget reservation failed",
+              retryable: false,
+            } as AEPError,
+          });
+        }
         return this.errorResponse(request, ERR.BUDGET_EXCEEDED, "Could not reserve budget", false);
       }
       budgetReservationId = reserveResult.reservation_id;
@@ -669,6 +729,51 @@ export class SecureExecutionEngine {
   // ========================================================================
   // Helpers
   // ========================================================================
+
+  /**
+   * Extract real credentials from the request's authorization field.
+   * Returns null if no recognized credential type is present.
+   * NEVER fabricates credentials from request.principal.
+   */
+  private extractCredentials(request: AEPRequest): Credentials | null {
+    const auth = request.authorization;
+    if (!auth) return null;
+
+    // Bearer token (from Authorization: Bearer <token> header)
+    if (auth.bearer_token) {
+      return { type: "bearer_token", token: auth.bearer_token };
+    }
+
+    // API key
+    if (auth.api_key) {
+      return { type: "api_key", key: auth.api_key };
+    }
+
+    // mTLS credentials (from TLS layer, set by gateway)
+    if (auth.mtls_subject_dn) {
+      return {
+        type: "mtls",
+        subject_dn: auth.mtls_subject_dn,
+        cert_fingerprint: auth.mtls_cert_fingerprint || "",
+        issuer_dn: auth.mtls_issuer_dn,
+        valid_to: auth.mtls_valid_to,
+      } as Credentials;
+    }
+
+    // Workload identity (SPIFFE)
+    if (auth.workload_spiffe_id) {
+      return { type: "workload_identity", spiffe_id: auth.workload_spiffe_id };
+    }
+
+    // token_ref — resolved by the gateway into a bearer_token before reaching engine
+    if (auth.token_ref) {
+      // In production, the gateway resolves token_ref → bearer_token
+      // If we reach here, the gateway didn't resolve it — reject
+      return null;
+    }
+
+    return null;
+  }
 
   private mapAuthzError(reasonCode: string | undefined): string {
     switch (reasonCode) {

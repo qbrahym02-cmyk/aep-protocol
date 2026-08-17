@@ -59,6 +59,7 @@ export async function runRaceTests(
       id: "req_race_1",
       type: "execute" as const,
       principal: { type: "user" as const, id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
       capability: { id: "race.counter" },
       input: { name: "visits" },
       execution: { idempotency_key: "race_key_42" },
@@ -94,6 +95,7 @@ export async function runRaceTests(
           id: `req_${i}`,
           type: "execute",
           principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
           capability: { id: "race.counter" },
           input: { name: `counter_${i}` },
           execution: { idempotency_key: `key_${i}` },
@@ -118,6 +120,7 @@ export async function runRaceTests(
           id: `req_noidem_${i}`,
           type: "execute",
           principal: { type: "user", id: "alice" },
+      authorization: { bearer_token: "test-token:alice" },
           capability: { id: "race.counter" },
           input: { name: "no_idem" },
           // no idempotency_key

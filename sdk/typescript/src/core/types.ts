@@ -85,6 +85,20 @@ export interface AEPRequest {
   authorization?: {
     token_ref?: string;
     scopes?: string[];
+    /** Bearer token from Authorization header */
+    bearer_token?: string;
+    /** API key from header */
+    api_key?: string;
+    /** mTLS subject DN (from TLS layer) */
+    mtls_subject_dn?: string;
+    /** mTLS cert fingerprint */
+    mtls_cert_fingerprint?: string;
+    /** mTLS issuer DN */
+    mtls_issuer_dn?: string;
+    /** mTLS cert expiry */
+    mtls_valid_to?: string;
+    /** SPIFFE workload identity */
+    workload_spiffe_id?: string;
   };
   budget?: Budget;
   delegation?: {
