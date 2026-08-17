@@ -34,12 +34,14 @@ import type { PolicyEngine } from "../policy/engine.js";
 import type { RiskEngine } from "../policy/risk.js";
 import type {
   ExecutionStore,
+  AuthorityStore,
   IdempotencyStore,
   IdempotencyScope,
   BudgetStore,
   EventStore,
   AuditStore,
 } from "../persistence/interfaces.js";
+import type { ProviderResolver } from "../runtime/provider_resolver.js";
 import type { EventEmitter } from "../events/emitter.js";
 import type { ApprovalService } from "../approval/service.js";
 import { ExecutionSignalImpl } from "./signal.js";
@@ -63,12 +65,14 @@ export interface SecureExecutionEngineOptions {
   policyEngine: PolicyEngine;
   riskEngine: RiskEngine;
   executionStore: ExecutionStore;
+  authorityStore?: AuthorityStore;         // FIX 3: Wire AuthorityStore
   idempotencyStore: IdempotencyStore;
   budgetStore: BudgetStore;
   eventStore: EventStore;
   auditStore: AuditStore;
   events?: EventEmitter;
   approvalService?: ApprovalService;
+  providerResolver?: ProviderResolver;     // FIX 2: Wire ProviderResolver
   defaultRetryPolicy?: RetryPolicy;
   defaultTimeoutMs?: number;
   productionMode?: boolean;
@@ -150,16 +154,30 @@ export class SecureExecutionEngine {
 
     // -------------------------------------------------------------------
     // 3) Resolve authority (P0-01, Contradiction A)
+    //    FIX 3: Load from AuthorityStore if not in engine's in-memory cache
     // -------------------------------------------------------------------
     let authority: Authority | undefined;
     const authorityId = (request as unknown as Record<string, unknown>).authority_id as string | undefined
       || ((request as unknown as Record<string, unknown>).authority as { authority_id?: string } | undefined)?.authority_id;
     if (authorityId) {
+      // Try in-memory engine first
       authority = this.opts.authorityEngine.get(authorityId);
+      // FIX 3: Fall back to AuthorityStore (durable persistence)
+      if (!authority && this.opts.authorityStore) {
+        authority = await this.opts.authorityStore.load(authorityId) as Authority | undefined || undefined;
+        if (authority) {
+          // Verify it's not revoked in the store
+          const isRevoked = await this.opts.authorityStore.isRevoked(authorityId);
+          if (isRevoked) {
+            return this.errorResponse(request, ERR.AUTHORITY_REVOKED, `Authority ${authorityId} is revoked`, false);
+          }
+        }
+      }
       if (!authority) {
         return this.errorResponse(request, ERR.UNAUTHORIZED, `Authority ${authorityId} not found`, false);
       }
     } else if (contract.risk.side_effect && this.opts.productionMode) {
+      // FIX 6: Read-only capabilities (no side_effect) don't require authority
       return this.errorResponse(
         request, ERR.UNAUTHORIZED,
         `Production mode requires authority for side-effect capability ${contract.id}`,
@@ -408,6 +426,25 @@ export class SecureExecutionEngine {
         return this.errorResponse(request, ERR.BUDGET_EXCEEDED, "Could not reserve budget", false);
       }
       budgetReservationId = reserveResult.reservation_id;
+    }
+
+    // -------------------------------------------------------------------
+    // FIX 2: Provider Resolution — select best provider before execution
+    // -------------------------------------------------------------------
+    let selectedProviderId = reg.provider_id;
+    if (this.opts.providerResolver) {
+      try {
+        const selection = await this.opts.providerResolver.resolve(contract, {
+          tenant_id: principal.tenant_id,
+          environment: this.opts.productionMode ? "production" : "test",
+          authority_allowed_providers: authority ? [reg.provider_id] : undefined,
+        });
+        if (selection.selected) {
+          selectedProviderId = selection.selected.provider_id;
+        }
+      } catch {
+        // Provider resolver failure is non-fatal — use default provider
+      }
     }
 
     // -------------------------------------------------------------------

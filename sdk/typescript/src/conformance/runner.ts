@@ -1100,6 +1100,13 @@ export async function runConformance(): Promise<ConformanceResult[]> {
   const durableResults = await runDurableTests(test, assert, assertEq);
   results.push(...durableResults);
 
+  // -----------------------------------------------------------------------
+  // 23. Adversarial Security Tests — replay, tampering, cross-tenant, crash
+  // -----------------------------------------------------------------------
+  const { runAdversarialTests } = await import("./security/adversarial-tests.js");
+  const adversarialResults = await runAdversarialTests(test);
+  results.push(...adversarialResults);
+
   return results;
 }
 
