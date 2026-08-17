@@ -727,8 +727,8 @@ export class SecureExecutionEngine {
       return { state: record.state };
     }
 
-    // Verify caller authorization (P0-10)
-    if (record.principal.id !== by.id && record.principal.tenant_id !== by.tenant_id) {
+    // FIX 7: Verify caller authorization — strict principal match (not tenant OR)
+    if (record.principal.id !== by.id) {
       throw new TypedAEPError({ code: "UNAUTHORIZED", message: "Only the execution owner can cancel", retryable: false });
     }
 
