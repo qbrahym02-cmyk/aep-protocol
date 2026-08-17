@@ -101,4 +101,11 @@ export { resourceRef, resourceToString, resourcesEqual, resourceBelongsToTenant,
 export { DefaultProviderResolver, type ProviderResolver, type ProviderSelection, type ProviderCandidate, type ResolutionContext } from "./runtime/provider_resolver.js";
 export { buildPlan, verifyPlanDigest, buildProof, verifyProofDigest, verifyProofForExecution, type Plan, type PlanNode, type Proof } from "./plan/artifact.js";
 
+// MCP Adapter + Provider SDK
+export { wrapMCPToolAsCapability, exposeAEPAsMCPTools, createMCPServerAdapter } from "./adapters/mcp/adapter.js";
+export { registerProvider, GITHUB_PROVIDER, STRIPE_PROVIDER, SLACK_PROVIDER, POSTGRES_PROVIDER, type AEPProviderDefinition } from "./providers/sdk/index.js";
+
+// Cryptographic protocol
+export { HmacSha256Signer, KeyStore, buildSignedReceipt, verifySignedReceipt, buildSignedAuthority, verifySignedAuthority, type Signer, type SigningKey, type SignatureEnvelope, type SignedReceipt, type SignedAuthority } from "./security/crypto.js";
+
 export { runConformance, type ConformanceResult } from "./conformance/runner.js";

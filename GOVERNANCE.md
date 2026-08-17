@@ -1,57 +1,64 @@
 # AEP Governance
 
-## القرارات المعمارية
+## Project Structure
 
-AEP    `spec/001-principles.md`.        .
+AEP is governed as an open protocol, not a single-vendor project.
 
-## عملية التطوير
+## Roles
 
-### Sprint-based (مرجع: spec/Sprints 152-160)
-
-| Sprint | الميزات |
+| Role | Responsibility |
 |---|---|
-| 1 | Envelope · Capability · Discovery · Execute · Result · Errors · Handles · Idempotency |
-| 2 | async · streaming · cancel · timeout · artifacts |
-| 3 | policy · risk · approval · dry-run · budget |
-| 4 | workflow · graphs · checkpoint · compensation · retry |
-| 5 | events · subscriptions · replay · provider health · fallback |
-| 6 | agents · identity · delegation · capability tokens · budget propagation |
-| 7 | semantic discovery · equivalence · adaptive routing |
-| 8 | audit · provenance · enterprise policies · certification |
-| 9 | dashboard · registry · marketplace · developer portal |
+| Spec Maintainer | Owns the protocol specification, approves RFCs |
+| Runtime Maintainer | Owns the reference implementation (TypeScript SDK) |
+| Security Officer | Owns threat model, security review, vulnerability disclosure |
+| Conformance Officer | Owns test vectors, certification, compatibility |
+| SDK Maintainer | Owns language-specific SDK (Python, Rust, Go) |
 
-### المستوى الحالي
+## RFC Process
 
-**Sprint 1-8** ( ). Sprint 9 dashboard/registry      "  Dashboard" ( 142).
+1. **Draft** — Open an issue with `[RFC]` prefix describing the proposed change
+2. **Discussion** — 30-day public comment period
+3. **Implementation** — PR with code + tests + spec changes
+4. **Review** — Two maintainers must approve
+5. **Merge** — If approved, merged into spec + reference implementation
 
-## الاستقلال عن MCP
+## Versioning Policy
 
-: **AEP    MCP.**  PR   dependency  MCP .   Adapter MCP `adapters/mcp/`    dependency  Core.
+```
+AEP 1.0.x — Patch (bug fixes, no breaking changes)
+AEP 1.x.0 — Minor (new features, backward compatible)
+AEP x.0.0 — Major (breaking changes, requires RFC)
+```
 
-## Core vs Profile
+## Breaking Change Policy
 
-feature Profile   interoperability    Core.    147  .
+Breaking changes require:
+1. RFC with migration guide
+2. 6-month deprecation period
+3. Conformance suite update
+4. All certified implementations must update within 6 months
 
-## معيار القبول
+## Security Disclosure
 
-1.   `npm run build`
-2.   `npx tsx src/cli.ts conformance` (46/46  )
-3.    conformance
-4.      feature
-5.  `CHANGELOG.md`
+1. Report vulnerabilities privately to: security@aep.dev (PGP key TBD)
+2. Maintain 90-day disclosure deadline
+3. Fix released before public disclosure
+4. CVE assigned if applicable
 
-## الإصدار
+## Compatibility Guarantees
 
-AEP 0.1 — Sprint .   1.0 :
-- 3 تنفيذات مستقلة
-- conformance suite كاملة
-- security review
-- interop tests
-- real deployments
+- 1.x clients work with 1.x+1 servers
+- 1.x+1 clients degrade gracefully with 1.x servers
+- Test vectors are immutable contracts
+- Canonicalization algorithm is frozen
 
+## Working Groups
 
-## المساهمة
-
-2.  PR  tests
-3.   `npm run build`  conformance pass
-4.  design decision  PR description
+| WG | Scope |
+|---|---|
+| Core Protocol | Envelope, canonicalization, state machine, errors |
+| Security | Authentication, authority, policy, risk, approval |
+| Persistence | Store interfaces, adapters (SQLite, PostgreSQL, Redis) |
+| Workflow | DAG, compensation, checkpoints, plan/proof |
+| Provider Ecosystem | Provider SDK, MCP adapter, provider mesh |
+| Conformance | Test vectors, certification, cross-language |
