@@ -1,0 +1,63 @@
+name: AEP Conformance CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: cd sdk/typescript && npm ci
+      - name: Build
+        run: cd sdk/typescript && npm run build
+      - name: Conformance
+        run: cd sdk/typescript && npx tsx src/cli.ts conformance
+      - name: Benchmark
+        run: cd sdk/typescript && npx tsx src/conformance/benchmark.ts
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Conformance
+        run: cd sdk/python && python3 -m aep.conformance
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-toolchain/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Build & Test
+        run: cd sdk/rust && cargo run --release --bin aep-conformance
+
+  cross-lang-interop:
+    runs-on: ubuntu-latest
+    needs: [typescript, python, rust]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions-rust-toolchain/rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install TS deps
+        run: cd sdk/typescript && npm ci
+      - name: Cross-language interop
+        run: cd sdk/typescript && npx tsx scripts/cross-lang-interop-triple.ts

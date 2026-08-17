@@ -21,8 +21,10 @@
     "conformance": "tsx src/cli.ts conformance"
   },
   "dependencies": {
+    "@types/pg": "^8.23.1",
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

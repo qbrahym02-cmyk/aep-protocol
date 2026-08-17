@@ -63,6 +63,8 @@ export {
   InMemoryEventStore,
 } from "./persistence/interfaces.js";
 export { SQLiteStore, type SQLiteStoreOptions } from "./persistence/adapters/sqlite.js";
+export { PostgresStore, type PostgresStoreOptions } from "./persistence/adapters/postgres.js";
+export { ProviderSandbox, SsrfProtector, FilesystemSandbox, type ProviderManifest, type NetworkPolicy, DEFAULT_NETWORK_POLICY, DEFAULT_FS_POLICY } from "./security/provider_sandbox.js";
 export { RecoveryEngine, type RecoveryReport, type RecoveryOptions } from "./recovery/engine.js";
 export {
   runAllVectors,
