@@ -3,6 +3,7 @@ name = "aep"
 version = "0.3.0"
 description = "AEP — Agent Execution Protocol. Python SDK (parity with TypeScript)"
 license = "MIT"
+keywords = ["aep", "agent", "ai", "governance", "authorization", "authority", "mcp", "guardrails"]
 requires-python = ">=3.10"
 
 [build-system]

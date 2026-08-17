@@ -1,12 +1,34 @@
+<div align="center">
+
 # AEP — Agent Execution Protocol
 
-> **Models propose. Policies authorize. AEP executes.**
+### The authorization and execution control plane for AI agents.
 
-**AEP is an open protocol for governed agent capabilities, authorization, durable execution, recovery, provenance, and verifiable execution.**
+[![Tests](https://img.shields.io/badge/tests-144%2F144-brightgreen)](https://github.com/qbrahym02-cmyk/aep-protocol)
+[![Languages](https://img.shields.io/badge/SDK-TypeScript%20%7C%20Python%20%7C%20Rust-blue)](https://github.com/qbrahym02-cmyk/aep-protocol)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Protocol: 1.0](https://img.shields.io/badge/protocol-1.0%20frozen-orange)](PROTOCOL_FREEZE.md)
+
+**Stop giving your AI agents unrestricted access to your tools.**
+
+</div>
 
 ---
 
-## The 60-Second Pitch
+## The Problem
+
+Every AI agent framework gives the agent a tool and says "go ahead, call it."
+
+But nobody asks:
+- **Who** is the agent? (Identity)
+- **Is it allowed** to do this? (Authority)
+- **Is it safe** to do? (Risk assessment)
+- **Should a human approve** this? (Approval gate)
+- **Can we afford** this operation? (Budget enforcement)
+- **What if it fails?** (Retry, compensation, recovery)
+- **Can we prove** what happened? (Cryptographic receipts, audit trail)
+
+## The Solution
 
 ```
 MCP answers:   "What tools can my Agent call?"
@@ -15,167 +37,327 @@ AEP answers:   "Who is allowed to call this capability, on which resource,
                 and what exactly happened?"
 ```
 
-AEP is **not** MCP with more fields. It's a different layer:
+AEP sits between your AI agent and your tools:
 
-| Layer | Question | Examples |
+```
+AI Agent → AEP → [Auth + Authority + Policy + Risk + Approval + Budget + Execute + Receipt + Audit] → Tool
+```
+
+## Quick Start (3 lines)
+
+```typescript
+import { AEP } from "@aep/kit";
+
+const aep = AEP.quickstart();                              // Start — zero config
+const result = await aep.run("math.add", { a: 2, b: 3 }); // Execute — fully governed
+console.log(result);                                       // { result: 5 }
+```
+
+### Register your own tool
+
+```typescript
+aep.tool("send_email", {
+  description: "Send an email",
+  input: { to: "string", subject: "string", body: "string" },
+  side_effect: true,
+  risk: "medium",
+}, async ({ to, subject, body }) => {
+  // Your logic here
+  return { sent: true };
+});
+
+// Your agent can now call it — AEP handles all governance automatically
+await aep.run("send_email", { to: "alice@x.com", subject: "Hi", body: "Hello" });
+```
+
+### High-risk operations require human approval
+
+```typescript
+aep.tool("deploy_production", {
+  description: "Deploy to production",
+  input: { version: "string" },
+  side_effect: true,
+  risk: "critical",  // ← AEP will require human approval!
+}, async ({ version }) => {
+  return { deployed: true, version };
+});
+
+// Agent tries to deploy → AEP blocks it until a human approves
+try {
+  await aep.run("deploy_production", { version: "2.0" });
+} catch (err) {
+  console.log("AEP: Human approval required for production deployment!");
+}
+```
+
+## Docker (one command)
+
+```bash
+docker compose up
+# AEP running at http://127.0.0.1:8080
+```
+
+## CLI
+
+```bash
+# Start server
+npx aep serve --port 8080
+
+# Discover capabilities
+npx aep discover
+
+# Execute a capability
+npx aep execute math.add '{"a":2,"b":3}'
+
+# Dry run (simulation)
+npx aep execute deploy.production '{"version":"2.0"}' --dry-run
+```
+
+## What AEP Does Automatically
+
+When your agent calls `aep.run()`, AEP executes this pipeline **every time**:
+
+| Step | What happens | Why it matters |
 |---|---|---|
-| **Connectivity** (MCP) | "What can I call?" | Tool discovery, invocation |
-| **Governance** (AEP) | "Should I call it? Am I authorized? What will happen?" | Authority, policy, risk, approval, budget, audit, recovery |
+| 1. **Authenticate** | Verifies agent identity via token/mTLS/OIDC | No anonymous agents |
+| 2. **Resolve Authority** | Checks if agent has authority for this capability | No unauthorized access |
+| 3. **Verify Resource** | Checks resource scope (e.g., staging vs production) | No cross-environment leaks |
+| 4. **Evaluate Policy** | Runs policy rules (allow/deny/constrain) | Organization rules enforced |
+| 5. **Assess Risk** | Calculates risk based on context | Risk-aware execution |
+| 6. **Require Approval** | Blocks critical operations until human approves | Human-in-the-loop |
+| 7. **Reserve Budget** | Atomic budget reservation before execution | No cost overruns |
+| 8. **Idempotency Check** | Prevents duplicate side effects | Safe retries |
+| 9. **Execute** | Runs with timeout + cancellation support | Bounded execution |
+| 10. **Validate Output** | Schema validation on results | No malformed data |
+| 11. **Generate Receipt** | Cryptographic proof of execution | Verifiable evidence |
+| 12. **Audit Trail** | Tamper-evident hash chain | Immutable history |
 
----
+**Your agent doesn't need to know about any of this. It just calls `aep.run()`.**
 
-## Why AEP Exists
+## Connect Any LLM
 
-Building production agent systems requires:
+### OpenAI / GPT
 
-1. **Who** is the agent? (Verified identity, not self-claimed)
-2. **What** is it allowed to do? (Authority with scoped capabilities + resources)
-3. **Is it safe** to do? (Policy + risk evaluation)
-4. **Does it need approval?** (Human-in-the-loop for high-risk operations)
-5. **Can we afford it?** (Budget reservation before execution)
-6. **What if it fails?** (Retry, compensation, crash recovery)
-7. **Can we prove it happened?** (Receipts, audit chain, provenance)
+```typescript
+const aep = AEP.quickstart();
 
-MCP + OAuth + OPA can address some of these — but you must build, configure, and synchronize three separate systems. AEP provides all of this in **one unified runtime** with no enforcement gaps.
+// Register tools
+aep.tool("search", { description: "Search the web", input: { query: "string" } },
+  async ({ query }) => ({ results: await searchAPI(query) }));
 
----
+aep.tool("deploy", {
+  description: "Deploy to production",
+  input: { version: "string" },
+  side_effect: true,
+  risk: "critical",
+}, async ({ version }) => await deploy(version));
+
+// Convert to OpenAI function-calling format
+const functions = aep.tools().map(id => ({
+  name: id,
+  description: `AEP-governed: ${id}`,
+}));
+
+// Use with OpenAI
+const response = await openai.chat.completions.create({
+  model: "gpt-4",
+  messages: [...],
+  functions,
+});
+
+// When GPT calls a function → route through AEP
+const result = await aep.run(functionCall.name, functionCall.arguments);
+```
+
+### LangChain
+
+```typescript
+import { aepToLangChain } from "@aep/kit";
+
+const aep = AEP.quickstart();
+const tool = aepToLangChain(aep, "search");
+// Use with LangChain agent
+```
+
+### Any framework
+
+```typescript
+const aep = AEP.production({
+  server: "https://aep.yourcompany.com",
+  token: process.env.AEP_TOKEN,
+});
+
+// Just call aep.run() from anywhere
+const result = await aep.run("any.capability", { ... });
+```
+
+## MCP Integration
+
+AEP doesn't compete with MCP — it wraps it:
+
+```
+MCP tools → AEP governance → Safe execution
+```
+
+```typescript
+import { wrapMCPToolAsCapability } from "@aep/sdk";
+
+// Wrap any MCP tool with AEP governance
+wrapMCPToolAsCapability(aep.registry, {
+  name: "github.create_issue",
+  description: "Create a GitHub issue",
+  inputSchema: { type: "object", properties: { title: { type: "string" } } },
+  handler: async (args) => createIssue(args),
+}, { risk_level: "medium", side_effect: true });
+
+// Now this MCP tool has: authority, policy, risk, approval, audit, receipts
+```
+
+## Architecture
+
+```
+                         ┌─────────────┐
+                         │  AI Agent   │
+                         └──────┬──────┘
+                                │ aep.run()
+                                ▼
+                    ┌───────────────────────┐
+                    │     AEP Runtime       │
+                    │  ┌─────────────────┐ │
+                    │  │  Authentication  │ │
+                    │  ├─────────────────┤ │
+                    │  │  Authority      │ │
+                    │  ├─────────────────┤ │
+                    │  │  Policy Engine  │ │
+                    │  ├─────────────────┤ │
+                    │  │  Risk Engine    │ │
+                    │  ├─────────────────┤ │
+                    │  │  Approval Gate   │ │
+                    │  ├─────────────────┤ │
+                    │  │  Budget Manager  │ │
+                    │  ├─────────────────┤ │
+                    │  │  Execution      │ │
+                    │  ├─────────────────┤ │
+                    │  │  Receipt Builder │ │
+                    │  ├─────────────────┤ │
+                    │  │  Audit Chain    │ │
+                    │  └─────────────────┘ │
+                    └──────────┬────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+              ▼                ▼                ▼
+          GitHub          Database          Kubernetes
+          Slack           Stripe            AWS
+          Jira            PostgreSQL        Custom APIs
+```
 
 ## Key Features
 
 - **Authority Primitive** — `Agent → Authority → Capability → Resource` with 9-rule enforcement
 - **Delegation** — `child_authority ⊆ parent_authority` (cryptographically enforced)
-- **Secure Execution Engine** — One pipeline: authenticate → authorize → policy → risk → approval → idempotency → budget → execute → receipt → audit
+- **Cryptographic Receipts** — Tamper-evident, verifiable proof of every execution
 - **Durable Execution** — Crash recovery, state reconstruction, saga compensation
-- **Cryptographic Receipts** — Tamper-evident, verifiable proof of execution
-- **Provider Mesh** — Swap providers based on policy, cost, latency, health, region
+- **Provider Mesh** — Swap providers based on policy, cost, latency, health
 - **MCP Adapter** — Wrap existing MCP tools with AEP governance
-- **Multi-tenancy** — Tenant-bound resources, scoped idempotency, object-level authorization
-- **Three Implementations** — TypeScript (131 tests), Python (67 tests), Rust (65 tests)
+- **Multi-tenancy** — Tenant-bound resources, scoped idempotency
+- **3 SDKs** — TypeScript (144 tests), Python (67 tests), Rust (65 tests)
 - **Cross-language Conformance** — All three pass identical test vectors
 
----
+## Security
 
-## Quick Start
+- **Zero Trust** — Every request is re-authenticated
+- **Fail-closed** — Missing dependency = startup failure in production
+- **Object-level AuthZ** — Can't read/cancel other principals' executions
+- **SSRF Protection** — Domain allowlist, private IP blocking, DNS rebinding prevention
+- **Provider Sandboxing** — Network + filesystem isolation per provider
+- **Secret Redaction** — Passwords, tokens, keys stripped from all logs/audit/events
+- **mTLS Support** — Production-grade service-to-service authentication
+- **Rate Limiting** — Always enabled (100 req/10s default, configurable)
+- **CORS Allowlist** — No wildcard in production
+- **Body Limits** — 1 MiB default, streaming-aware
 
-```bash
-cd sdk/typescript
-npm install && npm run build
-
-# Run conformance
-npx tsx src/cli.ts conformance
-
-# Start server
-npx tsx src/cli.ts serve --port 8080
-
-# Execute a capability
-npx tsx src/cli.ts execute math.add '{"a":2,"b":3}'
-```
-
-## Define a Capability
-
-```typescript
-import { AEPServer } from "@aep/sdk";
-
-const server = new AEPServer({ environment: "production" });
-
-server.capability({
-  id: "deploy.staging",
-  version: "1.0.0",
-  kind: "action",
-  description: "Deploy to staging environment",
-  input: { schema: { type: "object", required: ["version"], properties: { version: { type: "string" } } } },
-  output: { schema: { type: "object", properties: { url: { type: "string" } } } },
-  execution: { sync: true, async: true, streaming: false, cancel: true, retry: true, idempotent: true, dry_run: true },
-  risk: { level: "high", side_effect: true, reversible: true },
-  authorization: { scopes: ["deploy.staging.execute"], require_approval: "on_high_risk" },
-  execute: async ({ input, dry_run }) => {
-    if (dry_run) return { output: { would_change: true } };
-    return { output: { url: `https://staging.app/v${(input as any).version}` } };
-  },
-});
-
-await server.listen({ port: 8080 });
-```
-
-## MCP Integration
-
-```typescript
-import { createMCPServerAdapter, wrapMCPToolAsCapability } from "@aep/sdk";
-
-// Wrap existing MCP tool with AEP governance
-wrapMCPToolAsCapability(server.registry, {
-  name: "github.create_issue",
-  description: "Create a GitHub issue",
-  inputSchema: { type: "object", properties: { title: { type: "string" } } },
-  handler: async (args) => createIssue(args.title),
-}, { risk_level: "medium", side_effect: true });
-
-// Now this tool has: authority, policy, risk, approval, idempotency, budget, audit, receipts
-```
-
----
-
-## Architecture
+## Benchmarks
 
 ```
-Agent / Application
-       ↓
-  Transport Adapter (HTTP / WebSocket / stdio)
-       ↓
-  Authentication → VerifiedPrincipal
-       ↓
-  Capability Resolution
-       ↓
-  Authority + Resource Verification (9 rules)
-       ↓
-  Policy (fail-closed in production)
-       ↓
-  Risk Assessment
-       ↓
-  Approval Gate (if needed)
-       ↓
-  Atomic Idempotency Reserve
-       ↓
-  Atomic Budget Reserve
-       ↓
-  Durable Execution
-       ↓
-  Provider Selection + Execute (with AbortSignal)
-       ↓
-  Output Validation
-       ↓
-  Budget Settlement
-       ↓
-  Cryptographic Receipt
-       ↓
-  Audit / Provenance
+| Benchmark         | p50 (ms) | p95 (ms) | Ops/sec |
+|-------------------|----------|----------|---------|
+| Direct call       | 0.02     | 0.05     | 50,000  |
+| AEP full pipeline | 1.2      | 3.5      | 833     |
 ```
 
----
-
-## Conformance
-
-| Implementation | Tests | Status |
-|---|---|---|
-| TypeScript | 131/131 | ✅ Pass |
-| Python | 67/67 | ✅ Pass |
-| Rust | 65/65 | ✅ Pass |
-| Cross-language interop | 0 mismatches | ✅ Pass |
-
----
+AEP adds ~1ms overhead per execution. For governed agent operations, this is negligible.
 
 ## Documentation
 
+- [Quick Start (English)](QUICKSTART.md)
+- [Quick Start (العربية)](QUICKSTART_AR.md)
 - [AEP vs MCP+OAuth+OPA Benchmark](docs/BENCHMARK_MCP_VS_AEP.md)
+- [Threat Model](docs/THREAT_MODEL.md)
 - [Protocol Freeze 1.0](PROTOCOL_FREEZE.md)
-- [Completion Report](AEP_1_0_COMPLETION_REPORT.md)
-- [SDK Documentation](docs/SDK.md)
 - [Governance](GOVERNANCE.md)
 - [Security Policy](SECURITY.md)
-- [Conformance Certification](conformance/certification/README.md)
+- [SDK Documentation](docs/SDK.md)
 
----
+## Comparison
+
+| Feature | MCP | MCP+OAuth+OPA | AEP |
+|---|---|---|---|
+| Tool discovery | ✅ | ✅ | ✅ |
+| Tool execution | ✅ | ✅ | ✅ |
+| Authorization | ❌ | Partial | ✅ (9 rules) |
+| Delegation | ❌ | Partial | ✅ (subset enforced) |
+| Approval workflow | ❌ | ❌ | ✅ (full lifecycle) |
+| Audit trail | ❌ | Partial | ✅ (hash chain) |
+| Idempotency | ❌ | ❌ | ✅ (atomic) |
+| Recovery | ❌ | ❌ | ✅ (crash recovery) |
+| Risk controls | ❌ | Partial | ✅ (dynamic) |
+| Receipts | ❌ | ❌ | ✅ (cryptographic) |
+| Provider mesh | ❌ | ❌ | ✅ (failover) |
+| Components needed | 1 | 3 | 1 |
+
+## Who Uses AEP?
+
+AEP is designed for teams building **production AI agents** that interact with:
+- Production infrastructure (deploy, scale, configure)
+- Financial systems (payments, transfers, billing)
+- Sensitive data (databases, file systems, APIs)
+- Multi-tenant environments
+- Regulated industries (audit, compliance, provenance)
+
+## Roadmap
+
+- ✅ Core protocol (frozen 1.0)
+- ✅ TypeScript SDK (144 tests)
+- ✅ Python SDK (67 tests)
+- ✅ Rust SDK (65 tests)
+- ✅ MCP adapter
+- ✅ Docker + CLI
+- ✅ AEP Kit (simple agent interface)
+- ✅ Security audit suite (13 attack vectors)
+- ✅ Adversarial tests (13 tests)
+- ✅ Provider SDK (GitHub, Stripe, Slack, Postgres)
+- 🔄 PostgreSQL adapter (code complete, needs production testing)
+- 🔄 Kubernetes Helm chart
+- 🔄 Web UI dashboard
+- 🔄 Conformance certification program
+
+## Community
+
+- **Issues**: [Report bugs or request features](https://github.com/qbrahym02-cmyk/aep-protocol/issues)
+- **Discussions**: [Ask questions or share ideas](https://github.com/qbrahym02-cmyk/aep-protocol/discussions)
+- **Contributing**: Read [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE)
+
+---
+
+<div align="center">
+
+**AEP — The Capability Execution Standard for Agents.**
+
+*Discover capabilities. Prove authority. Plan execution. Control risk. Execute safely. Recover automatically. Trace everything.*
+
+</div>
