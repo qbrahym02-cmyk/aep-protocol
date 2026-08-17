@@ -237,20 +237,35 @@ export function createProductionRuntime(deps: ProductionRuntimeDependencies): Ex
         type: principal.type,
         id: principal.id,
         tenant_id: principal.tenant_id,
-      } as any);
+      });
     },
 
     resume: async (id: string, principal: VerifiedPrincipal): Promise<AEPResponse> => {
-      const result = await deps.executionStore.load(id);
-      if (!result) throw new Error("Execution not found");
-      if (result.principal.id !== principal.id) {
+      const record = await deps.executionStore.load(id);
+      if (!record) throw new Error("Execution not found");
+      if (record.principal.id !== principal.id) {
         throw new Error("Unauthorized");
       }
+      // FIX 12: resume() re-executes if the execution is in a resumable state
+      if (record.state === "paused") {
+        // Re-execute by calling engine with the original request
+        // The engine will pick up from the durable state
+        return engine.execute({
+          aep: "0.1",
+          id: `resume_${id}`,
+          type: "execute",
+          principal: record.principal,
+          capability: record.capability,
+          input: record.input,
+          execution: { mode: "sync" },
+        });
+      }
+      // For non-paused states, just return the current state
       return {
         aep: "0.1",
         id,
         status: "accepted",
-        execution: { id, state: result.state as ExecutionState },
+        execution: { id, state: record.state as ExecutionState },
       };
     },
 
@@ -261,7 +276,7 @@ export function createProductionRuntime(deps: ProductionRuntimeDependencies): Ex
       // principal_id and tenant_id are ALWAYS from the authenticated principal
       safeFilter.principal_id = principal.id;
       safeFilter.tenant_id = principal.tenant_id;
-      return deps.executionStore.list(safeFilter as any);
+      return deps.executionStore.list(safeFilter as Parameters<ExecutionStore["list"]>[0]);
     },
 
     shutdown: async (): Promise<void> => {

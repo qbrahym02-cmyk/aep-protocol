@@ -47,18 +47,22 @@ export class HTTPGateway {
   private corsHandler: CorsHandler;
   private bodyLimiter: BodyLimiter;
   private rateLimiter: RateLimiter | null = null;
+  // FIX 18: Default rate limiter — always enabled
+  private defaultRateLimiter: RateLimiter;
 
   constructor(opts: GatewayOptions) {
     this.opts = opts;
-    // FIX 9: Default CORS is empty allowlist (no wildcard)
     this.corsHandler = new CorsHandler(opts.corsConfig || { allowed_origins: [] });
     this.bodyLimiter = new BodyLimiter({ default_max_bytes: opts.maxBodyBytes || 1024 * 1024 });
     if (opts.rateLimitConfig) {
       this.rateLimiter = new RateLimiter(opts.rateLimitConfig);
     }
+    // FIX 18: Default rate limit: 100 requests per 10 seconds per principal
+    this.defaultRateLimiter = new RateLimiter({ capacity: 100, refill_per_second: 10 });
   }
 
-  listen(port = 8080, host = "0.0.0.0"): Promise<void> {
+  // FIX 17: Default host is 127.0.0.1 (localhost only), NOT 0.0.0.0 (all interfaces)
+  listen(port = 8080, host = "127.0.0.1"): Promise<void> {
     return new Promise((resolve) => {
       this.server = createServer((req, res) => this.handle(req, res));
       this.server.listen(port, host, () => resolve());
@@ -101,7 +105,14 @@ export class HTTPGateway {
 
       // CORS
       const origin = req.headers.origin as string | undefined;
+      // FIX 16: CORS preflight is handled WITHOUT authentication (standard browser behavior)
+      // but only if the origin is in the allowlist.
       if (req.method === "OPTIONS") {
+        if (!this.corsHandler.isOriginAllowed(origin || "")) {
+          res.writeHead(403);
+          res.end();
+          return;
+        }
         const headers = this.corsHandler.getPreflightHeaders(origin, req.headers["access-control-request-method"] as string, req.headers["access-control-request-headers"] as string);
         res.writeHead(204, headers);
         res.end();
@@ -116,11 +127,12 @@ export class HTTPGateway {
         return;
       }
 
-      // Rate limiting
-      if (this.rateLimiter) {
-        const decision = this.rateLimiter.consume(principal.id, "principal");
+      // FIX 18: Rate limiting is ALWAYS enabled with a default config
+      const limiter = this.rateLimiter || this.defaultRateLimiter;
+      if (limiter) {
+        const decision = limiter.consume(principal.id, "principal");
         if (!decision.allowed) {
-          this.sendJson(res, 429, { aep: "0.1", status: "error", error: RateLimiter.toAEPError(decision).toJSON() }, corsHeaders);
+          this.sendJson(res, 429, { aep: "0.1", status: "error", error: { code: "RATE_LIMITED", message: "Rate limit exceeded", retryable: true, retry_after_ms: decision.retry_after_ms } }, corsHeaders);
           return;
         }
       }
@@ -258,7 +270,7 @@ export class HTTPGateway {
 
         // Set principal from authenticated identity (not from request)
         request.principal = {
-          type: principal.type as any,
+          type: principal.type,
           id: principal.id,
           tenant_id: principal.tenant_id,
           delegation_chain: principal.delegation_chain,
@@ -279,8 +291,8 @@ export class HTTPGateway {
 
       return this.sendError(res, 404, "RESOURCE_NOT_FOUND", `No route for ${req.method} ${url.pathname}`, corsHeaders);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return this.sendError(res, 500, "INTERNAL_ERROR", message, {});
+      // FIX 15: Sanitize error messages — never leak internal details to client
+      return this.sendError(res, 500, "INTERNAL_ERROR", "An internal error occurred", {});
     }
   }
 
@@ -293,11 +305,17 @@ export class HTTPGateway {
     });
     res.write(":authenticated\n\n");
 
-    // FIX 3: Only stream events for this principal's executions
+    // FIX 3: SSE authorization — AND logic (principal AND tenant must match)
+    // Previously used OR which allowed same-tenant cross-principal visibility
     const handle = this.opts.events?.subscribe((event) => {
-      // Filter by principal
-      if (event.principal?.id !== principal.id && event.principal?.tenant_id !== principal.tenant_id) {
-        return;
+      // Must match BOTH principal.id AND tenant_id (if tenant is set)
+      if (event.principal?.id !== principal.id) {
+        return; // Different principal — deny
+      }
+      // Also check tenant if both have it
+      if (event.principal?.tenant_id && principal.tenant_id &&
+          event.principal.tenant_id !== principal.tenant_id) {
+        return; // Different tenant — deny
       }
       res.write(`event: ${event.type}\n`);
       res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -323,7 +341,7 @@ export class HTTPGateway {
   }
 
   private async readBody(req: IncomingMessage): Promise<string> {
-    return this.bodyLimiter.readBody(req as any);
+    return this.bodyLimiter.readBody(req as unknown as { [Symbol.asyncIterator](): AsyncIterableIterator<Buffer> });
   }
 
   private wellKnown(): unknown {

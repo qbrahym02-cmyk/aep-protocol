@@ -120,24 +120,14 @@ export class AuthorityError extends Error {
 }
 
 // ============================================================================
-// TTL Entry — for revocations and nonces
-// ============================================================================
-
-interface TTLEntry {
-  value: boolean;
-  expires_at: number; // epoch ms, 0 = never expires
-}
-
-// ============================================================================
 // Authority Engine
 // ============================================================================
 
 export class AuthorityEngine {
   // FIX 9: authorities Map is an in-memory cache. AuthorityStore is the durable source of truth.
   private authorities = new Map<string, Authority>();
-  // FIX 8: revocations with TTL
-  private revocations = new Map<string, TTLEntry>();
-  private revocationTtlMs = 24 * 60 * 60 * 1000; // 24h default
+  // FIX 1/8: Revocations are PERMANENT — no TTL. A revoked authority must never become valid again.
+  private revocations = new Set<string>();
 
   /**
    * Issue a new root authority.
@@ -386,11 +376,7 @@ export class AuthorityEngine {
     }
 
     auth.state = "revoked";
-    // FIX 8: Store revocation with TTL
-    this.revocations.set(authorityId, {
-      value: true,
-      expires_at: Date.now() + this.revocationTtlMs,
-    });
+    this.revocations.add(authorityId);
     // recursive cascade
     const toRevoke = [authorityId];
     while (toRevoke.length > 0) {
@@ -398,10 +384,7 @@ export class AuthorityEngine {
       for (const child of this.authorities.values()) {
         if (child.parent_authority_id === id && !this.isRevoked(child.id)) {
           child.state = "revoked";
-          this.revocations.set(child.id, {
-            value: true,
-            expires_at: Date.now() + this.revocationTtlMs,
-          });
+          this.revocations.add(child.id);
           toRevoke.push(child.id);
         }
       }
@@ -419,14 +402,8 @@ export class AuthorityEngine {
   }
 
   isRevoked(authorityId: string): boolean {
-    const entry = this.revocations.get(authorityId);
-    if (!entry) return false;
-    // FIX 8: Check TTL
-    if (entry.expires_at > 0 && entry.expires_at < Date.now()) {
-      this.revocations.delete(authorityId);
-      return false;
-    }
-    return true;
+    // FIX 1: Revocations are permanent — no TTL check
+    return this.revocations.has(authorityId);
   }
 
   get(authorityId: string): Authority | undefined {
@@ -450,19 +427,8 @@ export class AuthorityEngine {
   }
 
   /**
-   * FIX 8: Clean up expired revocations and authorities.
+   * No gc() needed — revocations are permanent.
    */
-  gc(): number {
-    let removed = 0;
-    const now = Date.now();
-    for (const [id, entry] of this.revocations) {
-      if (entry.expires_at > 0 && entry.expires_at < now) {
-        this.revocations.delete(id);
-        removed++;
-      }
-    }
-    return removed;
-  }
 
   // ========================================================================
   // Pattern matching — FIX 5

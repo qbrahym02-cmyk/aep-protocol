@@ -46,20 +46,15 @@ export interface AEPServerOptions {
   policies?: PolicyDocument[];
   environment?: "test" | "staging" | "production";
   /**
-    * @deprecated §184: autoApprove is development-only.
-    * In production, use explicit ApprovalService.
-    */
+   * @deprecated autoApprove is development-only.
+   */
   autoApprove?: boolean;
   /**
-    * Production composition root dependencies.
-    * When provided, the server uses SecureExecutionEngine.
-    * When omitted, the server uses development runtime.
-    */
-  productionDeps?: Partial<ProductionRuntimeDependencies>;
-  /**
-    * Custom runtime override (for advanced use cases).
-    */
-  runtime?: ExecutionRuntime;
+   * Production dependencies. When provided with environment="production",
+   * ALL fields are required (not Partial). The server will throw if any
+   * security dependency is missing.
+   */
+  productionDeps?: ProductionRuntimeDependencies;
 }
 
 export interface CapabilityDefinition {
@@ -110,42 +105,40 @@ export class AEPServer {
     });
     if (opts.policies) for (const p of opts.policies) this.policy.loadPolicy(p);
 
-    // §3: Create the runtime via composition root
-    if (opts.runtime) {
-      this._runtime = opts.runtime;
-    } else if (opts.productionDeps) {
-      // Production mode — all security deps required.
-      // TestAuthenticator is NEVER used in production.
-      if (opts.environment === "production" && !opts.productionDeps.authenticator) {
-        throw new Error(
-          "Production mode requires an authenticator. " +
-          "TestAuthenticator is not allowed in production. " +
-          "Configure OIDC, mTLS, or a custom Authenticator."
-        );
+    // FIX 4: No runtime override — production composition root is the only path.
+    // FIX 2: Production mode NEVER falls back to InMemory stores.
+    // FIX 5: productionDeps must be full ProductionRuntimeDependencies (not Partial).
+    if (opts.productionDeps) {
+      if (opts.environment === "production") {
+        // FIX 2: In production, ALL stores must be explicitly provided — no InMemory fallback
+        const missing: string[] = [];
+        if (!opts.productionDeps.executionStore) missing.push("executionStore");
+        if (!opts.productionDeps.authorityStore) missing.push("authorityStore");
+        if (!opts.productionDeps.idempotencyStore) missing.push("idempotencyStore");
+        if (!opts.productionDeps.budgetStore) missing.push("budgetStore");
+        if (!opts.productionDeps.eventStore) missing.push("eventStore");
+        if (!opts.productionDeps.auditStore) missing.push("auditStore");
+        if (!opts.productionDeps.authenticator) missing.push("authenticator");
+        if (missing.length > 0) {
+          throw new Error(
+            `PRODUCTION MODE VIOLATION: Missing required dependencies: ${missing.join(", ")}.\n` +
+            `InMemory stores are NOT allowed in production. Use SQLite or PostgreSQL adapters.`
+          );
+        }
       }
       this._runtime = createProductionRuntime({
+        ...opts.productionDeps,
         registry: this.registry,
-        authenticator: opts.productionDeps.authenticator || new TestAuthenticator(),
-        authorityEngine: this.authority,
-        policyEngine: this.policy,
-        riskEngine: this.risk,
-        executionStore: opts.productionDeps.executionStore || new InMemoryExecutionStore(),
-        authorityStore: opts.productionDeps.authorityStore || new InMemoryAuthorityStore(),
-        idempotencyStore: opts.productionDeps.idempotencyStore || new InMemoryIdempotencyStore(),
-        budgetStore: opts.productionDeps.budgetStore || new InMemoryBudgetStore(),
-        eventStore: opts.productionDeps.eventStore || new InMemoryEventStore(),
-        auditStore: opts.productionDeps.auditStore || {
-          append: async (r: any) => this.audit.record(r),
-          verify: async () => this.audit.verify(),
-          list: async (_filter?: any) => this.audit.list(),
-        },
-        events: this.events,
+        authorityEngine: opts.productionDeps.authorityEngine || this.authority,
+        policyEngine: opts.productionDeps.policyEngine || this.policy,
+        riskEngine: opts.productionDeps.riskEngine || this.risk,
+        events: opts.productionDeps.events || this.events,
         approvalService: opts.productionDeps.approvalService || this.approval,
         productionMode: opts.environment === "production",
         defaultTimeoutMs: opts.defaultTimeoutMs,
       });
     } else {
-      // Development mode (default)
+      // Development mode (default) — uses InMemory stores + dev authenticator
       this._runtime = createDevelopmentRuntime(this.registry);
     }
   }
