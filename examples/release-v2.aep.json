@@ -1,0 +1,17 @@
+{
+  "name": "release-v2",
+  "version": "1.0.0",
+  "description": "Autonomous software release workflow",
+  "inputs": [
+    { "name": "version", "type": "string", "required": true },
+    { "name": "skip_tests", "type": "boolean", "default": false }
+  ],
+  "budget": { "max_cost_usd": 5, "max_calls": 30, "max_duration_ms": 600000, "max_parallel": 4 },
+  "defaults": { "retry": { "max_attempts": 2, "backoff_ms": 500 }, "on_failure": "fail" },
+  "nodes": [
+    { "id": "build", "capability": "math.add", "inputs": { "a": 1, "b": 2 }, "timeout_ms": 120000 },
+    { "id": "security", "capability": "echo.ping", "depends_on": ["build"], "inputs": { "message": "scan" }, "timeout_ms": 60000 },
+    { "id": "tests", "capability": "echo.ping", "depends_on": ["build"], "condition": "${!inputs.skip_tests}", "inputs": { "message": "tests" }, "timeout_ms": 60000 },
+    { "id": "deploy_staging", "capability": "echo.ping", "depends_on": ["security", "tests"], "inputs": { "message": "deploy" }, "on_failure": "compensate", "compensation": "echo.ping", "timeout_ms": 60000 }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/event.json",
+  "title": "AEP Event",
+  "description": "Event emitted by the runtime (AEP 0.1)",
+  "type": "object",
+  "required": ["event_id", "type", "source", "timestamp"],
+  "properties": {
+    "event_id": { "type": "string", "description": "Unique event identifier" },
+    "type": {
+      "type": "string",
+      "description": "Event type, e.g. execution.started, execution.completed, approval.requested, artifact.created, resource.changed, provider.degraded",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "source": { "type": "string", "description": "Emitting component (e.g. runtime, gateway, provider:github)" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "sequence": { "type": "integer", "minimum": 0, "description": "Monotonic sequence for replay" },
+    "execution_id": { "type": "string" },
+    "trace_id": { "type": "string" },
+    "principal": { "$ref": "envelope.json#/definitions/principal" },
+    "data": { "type": "object" },
+    "delivery": {
+      "type": "string",
+      "enum": ["at_most_once", "at_least_once", "effectively_once"]
+    }
+  }
+}

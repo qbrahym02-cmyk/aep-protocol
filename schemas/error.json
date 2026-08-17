@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/error.json",
+  "title": "AEP Error",
+  "description": "Typed error object (AEP 0.1)",
+  "type": "object",
+  "required": ["code", "message", "retryable"],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "INVALID_REQUEST",
+        "INVALID_CAPABILITY",
+        "CAPABILITY_NOT_FOUND",
+        "CAPABILITY_VERSION_UNSUPPORTED",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "APPROVAL_REQUIRED",
+        "APPROVAL_EXPIRED",
+        "POLICY_DENIED",
+        "RISK_TOO_HIGH",
+        "RESOURCE_NOT_FOUND",
+        "RESOURCE_CONFLICT",
+        "RATE_LIMITED",
+        "TIMEOUT",
+        "PROVIDER_UNAVAILABLE",
+        "EXECUTION_CANCELLED",
+        "EXECUTION_EXPIRED",
+        "CHECKPOINT_NOT_FOUND",
+        "COMPENSATION_FAILED",
+        "SCHEMA_VALIDATION_FAILED",
+        "CONCURRENCY_CONFLICT",
+        "BUDGET_EXCEEDED",
+        "DELEGATION_DENIED",
+        "TOKEN_EXPIRED",
+        "INVALID_STATE_TRANSITION",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "message": { "type": "string", "minLength": 1 },
+    "retryable": { "type": "boolean" },
+    "retry_after_ms": { "type": "integer", "minimum": 0 },
+    "recovery": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["retry", "fallback", "reauthorize", "ask_user", "compensate", "abort"]
+      }
+    },
+    "details": { "type": "object" },
+    "trace_id": { "type": "string" },
+    "execution_id": { "type": "string" }
+  }
+}

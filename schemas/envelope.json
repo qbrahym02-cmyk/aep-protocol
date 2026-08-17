@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/envelope.json",
+  "title": "AEP Envelope",
+  "description": "The standard message envelope for AEP requests and responses (AEP 0.1)",
+  "type": "object",
+  "required": ["aep", "id", "type"],
+  "properties": {
+    "aep": {
+      "type": "string",
+      "const": "0.1",
+      "description": "AEP protocol version"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique request identifier (UUID or ULID recommended)"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["execute", "discover", "cancel", "resume", "subscribe", "approve"],
+      "description": "Request type"
+    },
+    "principal": {
+      "$ref": "#/definitions/principal"
+    },
+    "capability": {
+      "$ref": "#/definitions/capability_ref"
+    },
+    "input": {
+      "type": "object",
+      "description": "Capability input arguments"
+    },
+    "execution": {
+      "$ref": "#/definitions/execution_options"
+    },
+    "trace": {
+      "$ref": "#/definitions/trace"
+    },
+    "authorization": {
+      "type": "object",
+      "properties": {
+        "token_ref": { "type": "string" },
+        "scopes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "budget": {
+      "$ref": "#/definitions/budget"
+    },
+    "delegation": {
+      "type": "object",
+      "properties": {
+        "delegation_chain": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered from origin principal to current principal"
+        },
+        "parent_execution_id": { "type": "string" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["accepted", "completed", "error", "approval_required", "partial"],
+      "description": "Response status"
+    },
+    "execution_response": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "created", "planned", "awaiting_approval", "authorized", "queued",
+            "running", "paused", "cancelling", "cancelled", "retrying",
+            "compensating", "completed", "failed", "expired"
+          ]
+        }
+      }
+    },
+    "output": { "type": "object" },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "artifact.json#/properties/id" }
+    },
+    "error": { "$ref": "error.json" },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "approval_id": { "type": "string" },
+        "reason": { "type": "string" },
+        "risk": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "allowed_decisions": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["approve", "deny", "approve_with_constraints"] }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "principal": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string", "enum": ["user", "agent", "service", "system"] },
+        "id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "delegation_chain": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "capability_ref": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "description": "Dotted capability identifier, e.g. github.issue.create"
+        },
+        "version": {
+          "type": "string",
+          "description": "SemVer range: exact (1.2.3), caret (^1.2), tilde (~1.2.3), range (>=1.0.0 <2.0.0)"
+        }
+      }
+    },
+    "execution_options": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["sync", "async", "streaming"] },
+        "idempotency_key": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "dry_run": { "type": "boolean" },
+        "timeout_ms": { "type": "integer", "minimum": 1 },
+        "max_retries": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "properties": {
+        "trace_id": { "type": "string" },
+        "span_id": { "type": "string" },
+        "parent_span_id": { "type": "string" },
+        "baggage": { "type": "object" }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "max_cost_usd": { "type": "number", "minimum": 0 },
+        "max_calls": { "type": "integer", "minimum": 0 },
+        "max_duration_ms": { "type": "integer", "minimum": 1 },
+        "max_parallel": { "type": "integer", "minimum": 1 },
+        "max_artifact_size_mb": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

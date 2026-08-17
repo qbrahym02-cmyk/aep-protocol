@@ -1,0 +1,32 @@
+{
+  "name": "@aep/sdk",
+  "version": "0.1.0",
+  "description": "AEP — Agent Execution Protocol. TypeScript SDK + Core Runtime + HTTP Gateway + CLI",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "aep": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test --import tsx/esm tests/",
+    "test:conformance": "node --test --import tsx/esm tests/conformance.test.ts",
+    "serve": "tsx src/cli.ts serve",
+    "discover": "tsx src/cli.ts discover",
+    "execute": "tsx src/cli.ts execute",
+    "inspect": "tsx src/cli.ts inspect",
+    "conformance": "tsx src/cli.ts conformance"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

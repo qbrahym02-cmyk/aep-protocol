@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/execution.json",
+  "title": "AEP Execution Record",
+  "description": "Lifecycle record of a single execution (AEP 0.1)",
+  "type": "object",
+  "required": ["id", "request_id", "principal", "capability", "state", "created_at"],
+  "properties": {
+    "id": { "type": "string", "description": "execution_id — opaque handle" },
+    "request_id": { "type": "string" },
+    "principal": { "$ref": "envelope.json#/definitions/principal" },
+    "capability": { "$ref": "envelope.json#/definitions/capability_ref" },
+    "capability_version": { "type": "string" },
+    "input": { "type": "object" },
+    "state": {
+      "type": "string",
+      "enum": [
+        "created", "planned", "awaiting_approval", "authorized", "queued",
+        "running", "paused", "cancelling", "cancelled", "retrying",
+        "compensating", "completed", "failed", "expired"
+      ]
+    },
+    "previous_state": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "policy_decision": {
+      "type": "object",
+      "properties": {
+        "decision": { "type": "string", "enum": ["allow", "deny", "approval", "constrain"] },
+        "reason_code": { "type": "string" },
+        "matched_rules": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "risk_assessment": {
+      "type": "object",
+      "properties": {
+        "level": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "score": { "type": "number" },
+        "factors": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "trace_id": { "type": "string" },
+    "delegation_chain": { "type": "array", "items": { "type": "string" } },
+    "budget": { "$ref": "envelope.json#/definitions/budget" },
+    "budget_used": {
+      "type": "object",
+      "properties": {
+        "cost_usd": { "type": "number" },
+        "calls": { "type": "integer" },
+        "duration_ms": { "type": "integer" }
+      }
+    },
+    "result": { "type": "object" },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "error": { "$ref": "error.json" },
+    "approval": {
+      "type": "object",
+      "properties": {
+        "approval_id": { "type": "string" },
+        "decision": { "type": "string", "enum": ["approve", "deny", "approve_with_constraints"] },
+        "decided_by": { "type": "string" },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "constraints": { "type": "object" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "execution_id": { "type": "string" },
+        "principal": { "type": "string" },
+        "delegation_chain": { "type": "array", "items": { "type": "string" } },
+        "capability": { "type": "string" },
+        "capability_version": { "type": "string" },
+        "sources": { "type": "array", "items": { "type": "string" } },
+        "policy": { "type": "string" },
+        "trace_id": { "type": "string" }
+      }
+    },
+    "idempotency_key": { "type": "string" },
+    "parent_execution_id": { "type": "string" },
+    "checkpoint_id": { "type": "string" }
+  }
+}

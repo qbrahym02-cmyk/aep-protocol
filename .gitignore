@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+*.tar.gz
+*.zip
+tmp-cross-lang/
+.DS_Store
+*.log
+.env
+coverage/
+.nyc_output/

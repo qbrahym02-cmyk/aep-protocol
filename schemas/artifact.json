@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/artifact.json",
+  "title": "AEP Artifact",
+  "description": "Large data reference (AEP 0.1)",
+  "type": "object",
+  "required": ["id", "mime_type", "size", "checksum"],
+  "properties": {
+    "id": { "type": "string", "description": "Opaque artifact handle, e.g. art_42" },
+    "mime_type": { "type": "string" },
+    "size": { "type": "integer", "minimum": 0, "description": "Size in bytes" },
+    "checksum": {
+      "type": "object",
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["sha256", "sha512", "md5"] },
+        "value": { "type": "string" }
+      }
+    },
+    "encoding": { "type": "string", "enum": ["raw", "base64", "url"] },
+    "location": {
+      "type": "string",
+      "description": "Opaque location reference resolvable by Artifact Manager"
+    },
+    "retention": {
+      "type": "object",
+      "properties": {
+        "until": { "type": "string", "format": "date-time" },
+        "policy": { "type": "string", "enum": ["temporary", "permanent", "audit"] }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "execution_id": { "type": "string" },
+        "capability": { "type": "string" },
+        "sources": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "access_policy": {
+      "type": "object",
+      "properties": {
+        "read_scopes": { "type": "array", "items": { "type": "string" } },
+        "expires_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

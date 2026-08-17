@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/policy.json",
+  "title": "AEP Policy",
+  "description": "Policy rule definition (AEP 0.1)",
+  "type": "object",
+  "required": ["version", "rules"],
+  "properties": {
+    "version": { "type": "string" },
+    "id": { "type": "string" },
+    "default_decision": { "type": "string", "enum": ["allow", "deny"], "default": "deny" },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["effect"],
+        "properties": {
+          "id": { "type": "string" },
+          "principal": {
+            "type": "string",
+            "description": "Glob pattern, e.g. agent.researcher, agent.*"
+          },
+          "principal_type": { "type": "string", "enum": ["user", "agent", "service", "system"] },
+          "capability": {
+            "type": "string",
+            "description": "Glob pattern, e.g. github.issue.create, payment.*"
+          },
+          "resource": { "type": "string" },
+          "tenant_id": { "type": "string" },
+          "environment": { "type": "string", "enum": ["test", "staging", "production"] },
+          "effect": { "type": "string", "enum": ["allow", "deny", "approval", "constrain"] },
+          "reason_code": { "type": "string" },
+          "require": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["human_approval", "strong_auth", "step_up", "dry_run_first"]
+            }
+          },
+          "constraints": { "type": "object" },
+          "max_risk_level": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "max_cost_usd": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

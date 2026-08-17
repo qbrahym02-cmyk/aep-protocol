@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aep.dev/schemas/0.1/capability.json",
+  "title": "AEP Capability Contract",
+  "description": "Contract describing a usable capability (AEP 0.1)",
+  "type": "object",
+  "required": ["id", "version", "kind", "description", "input", "output", "execution", "risk", "authorization"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "description": "Dotted capability identifier"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "SemVer exact version"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["read", "query", "search", "transform", "action", "workflow", "subscribe", "stream", "delegate", "agent", "artifact", "ui"]
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "input": {
+      "type": "object",
+      "required": ["schema"],
+      "properties": {
+        "schema": { "type": "object" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["schema"],
+      "properties": {
+        "schema": { "type": "object" }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "description"],
+        "properties": {
+          "code": { "type": "string" },
+          "description": { "type": "string" },
+          "retryable": { "type": "boolean" }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["sync", "async", "streaming", "cancel", "retry", "idempotent", "dry_run"],
+      "properties": {
+        "sync": { "type": "boolean" },
+        "async": { "type": "boolean" },
+        "streaming": { "type": "boolean" },
+        "cancel": { "type": "boolean" },
+        "retry": { "type": "boolean" },
+        "idempotent": { "type": "boolean" },
+        "dry_run": { "type": "boolean" }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["level", "side_effect", "reversible"],
+      "properties": {
+        "level": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "impact": { "type": "string", "enum": ["none", "operational", "financial", "reputational", "compliance", "safety"] },
+        "side_effect": { "type": "boolean" },
+        "reversible": { "type": "boolean" },
+        "blast_radius": { "type": "string", "enum": ["single_record", "multi_record", "service", "tenant", "account", "global"] },
+        "data_sensitivity": { "type": "string", "enum": ["public", "internal", "confidential", "restricted", "secret"] }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "required": ["scopes"],
+      "properties": {
+        "scopes": { "type": "array", "items": { "type": "string" } },
+        "require_approval": { "type": "string", "enum": ["always", "on_high_risk", "never"] },
+        "require_strong_auth": { "type": "boolean" },
+        "require_step_up": { "type": "boolean" }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "currency": { "type": "string", "default": "USD" },
+        "estimated": { "type": "number", "minimum": 0 }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "properties": {
+        "p50_ms": { "type": "integer", "minimum": 0 },
+        "p95_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "freshness": { "type": "string", "enum": ["real_time", "seconds", "minutes", "daily"] },
+    "compensation": { "type": "string", "description": "Inverse capability id" },
+    "provider": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "region": { "type": "string" },
+    "data_classification": { "type": "string", "enum": ["public", "internal", "confidential", "restricted", "secret"] },
+    "semantic_class": { "type": "string", "description": "For equivalence — e.g. issue.creation" },
+    "examples": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}
